@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns="http://www.w3.org/1999/html">
+<head>
+    <title>Akka-Cassandra Cluster API Documentation</title>
+    <meta charset="utf-8">
+
+    <link rel="icon" type="image/png"  href="../../img/identicon.png">
+
+    <!-- Mobile viewport optimized: h5bp.com/viewport -->
+    <meta name="viewport" content="width=device-width">
+
+    <!-- Main stylesheet imports bootstrap css and adds custom -->
+    <link href="../../css/docstyle.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="../../css/styles.css">
+    <link rel="stylesheet" type="text/css" href="../../css/pretty-json.css">
+    <link rel="stylesheet" type="text/css" href="../../css/formstyles.css">
+
+    <!-- Modernizr for browser feature-checking
+                + HTML5shiv (included in modernizr) see modernizr.com -->
+    <script src="../../js/modernizr-2.5.3.min.js"></script>
+
+    <!-- jQuery via Google + local fallback, see h5bp.com -->
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script>window.jQuery || document.write('<script src="../../js/jquery-1.10.2.min.js"><\/script>')</script>
+
+    <script type="text/javascript" src="../../js/json.js" id="json"></script>
+    <script type="text/javascript" src="../../js/underscore-min.js"></script>
+    <script type="text/javascript" src="../../js/backbone-min.js"></script>
+    <script type="text/javascript" src="../../js/pretty-json-min.js"></script>
+
+    <!-- Bootstrap JS: compiled and minified -->
+    <script src="../../js/bootstrap.min.js"></script>
+
+</head>
+
+<body>
+
+<div class="navbar navbar-fixed-top">
+    <div class="navbar-inner">
+        <div class="container">
+            <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </a>
+            <a class="brand" href="" target=_blank><strong>Akka Cassandra</strong> Cluster Test</a>
+
+            </div>
+            <!-- /.nav-collapse -->
+        </div>
+        <!-- /.container -->
+    </div>
+    <!-- /navbar-inner -->
+</div>
+<!-- /navbar -->
+
+<!--<div class="container">-->
+<div class="page-header">
+    <h2>Test Cluster API Live Documentation</h2>
+</div>
+
+<div class="row">
+<div class="tabbable span12">
+
+<article>
+<script type="text/javascript">
+    $('#v0').addClass('selected');
+</script>
+
+<section>
+    <h3 class="title">Overview</h3>
+
+    <p>The cluster test simulates work performed on a Akka cluster and results persisted in a co-located Cassandra cluster.</p>
+
+    <p>This live documentation site is served from the same service that exposes the API. Developers can learn about the
+        API by interacting with the service through the web forms for each endpoint. The try-it button calls the real
+        service with the parameters in the forms and displays the results.
+    </p>
+
+    <h4>Architecture</h4>
+    <p>
+    The cluster is a co-located Akka and Cassandra one. Each node exposes identical services:
+    <ol>
+        <li>Spray.io HTTP service (API endpoints plus this Live Doc site)</li>
+        <li>Akka Cluster Node - actor based processing </li>
+        <li>Cassandra Cluster Node - Data store</li>
+    </ol>
+
+    <img align="center" width="50%" src="../../img/Spray-Akka-Cassandra.png">
+
+    <h4>Load Balancing</h4>
+    There are two levels of load balancing. The first is through the Load Balancer (e.g. Cloud Service or HAProxy) - this distributes incoming web traffic equally to all healty nodes.
+    The second is Akka Cluster work balancing. The cluster has a number of routees distributed across all cluster nodes. The distributor distributes work to the least loaded nodes. Least loaded in the sense of CPU, Memory, Latency or a combination thereof.
+    Each routee simply creates a new worker actor when it receives a request. The Worker does the calculation and dies off after updating the data store.
+
+    <h4>Optimizations</h4>
+    <h5>Computational Isolation</h5>
+    You will notice, especially for small clusters, that the cluster can easily be loaded to 100% CPU usage across all cores. The Spray HTTP service is resource starved by this and the responses will become sluggish or time out. The solution is fairly simple - Akka allows us to define cluster roles, we divide the cluster into a front-end part and a back-end part.
+    The calculation work is done exclusively on the back-end, leaving the front end resources to ensure timely responses to clients.
+    <h5>Data Locality</h5>
+    When the replication factor on the keyspace we use is smaller than the number of nodes all data will not be present on each node - the worker actors will sometimes do a cross cluster call, which is more expensive, latency wise.
+    It is possible to predict which nodes contain specific keys and we can launch worker actors with this in mind.
+    </p>
+    <h5>Resiliency</h5>
+    The combined cluster is fairly resilient out of the box - we can lose a node and the Load balancer as well as Akka and Cassandra will notice and stop routing traffic, work and data to the dead node.
+    It is further possible to use Event Sourcing to make sure work-in-progress on a failed node is not lost and can be continued.
+
+    <br>
+</section>
+
+
+<section>
+<ul>
+<li class="endpoint">
+<h3 class="title">
+    <span class="name">Factorial Calculation</span>
+    <ul class="actions">
+        <li class="list-methods"><a href="#">List Methods</a></li>
+        <li class="expand-methods"><a href="#">Expand Methods</a></li>
+    </ul>
+</h3>
+<section>
+    <p>
+        The PUT call allows the user to add work to the cluster by specifying a input to a factorial function.
+        The cluster will distribute the work to a actor and persist the result to the data store indexed by the input number.
+        The GET call retrieves the result if it has been calculated. Results that have been calculated previously are not re-calculated - their results are looked up in the data store and returned.
+    </p>
+</section>
+<br>
+
+<ul style="display: block; " class="methods hidden">
+
+<li class="method put ">
+    <a name="putfactorial">
+        <div class="title">
+            <span class="http-method authreq">PUT</span>
+            <span class="name">Calculate command</span>
+            <span class="uri">/api/v0/factorial/{input}</span>
+        </div>
+    </a>
+
+    <form class="hidden"><input value="PUT" name="httpMethod" type="hidden"><input value="" name="" type="hidden">
+        <input value="/api/v0/factorial/:input"
+               name="methodUri" type="hidden">
+            <span class="description"><p class="desc_title">
+                Command to calculate the factorial of the input</p>
+                <br>
+                <p>
+                    The input value becomes the identity of the request - also the row key to the result in Cassandra
+                </p>
+                <br>
+            </span>
+        <article>
+            <section>
+                <h4>Call Description</h4>
+                <table class="parameters">
+                    <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Value</th>
+                        <th>Type</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody class="putmandatory">
+                    <div id="param1">
+                        <tr class="">
+                            <td class="name">input</td>
+                            <td class="parameter"><input name="params[input]"
+                                                         value=100>
+                            </td>
+                            <td class="type">Integer</td>
+                            <td class="required">R</td>
+                            <td class="description">Positive integer input to the factorial function</td>
+                        </tr>
+                    </div>
+                    </tbody>
+
+                </table>
+
+            </section>
+            <section>
+                <h4>Request Headers</h4>
+                <table class="parameters">
+                    <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Value</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="">
+                        <td class="name">Accept</td>
+                        <td class="parameter"><input value="application/json" readonly></td>
+                        <td class="required">R</td>
+                        <td class="description">Accept specifier</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h4>Live Call</h4>
+                <input value="Try it!" id="putsetenv" type="submit">
+
+                <div class="liveformpoint"></div>
+            </section>
+            <section>
+                <h4>Response Document</h4>
+
+                <p>Json document containing results</p>
+            </section>
+            <section>
+                <h4>Response Codes</h4>
+
+                <div>
+                </div>
+                <table class="responsecodes">
+                    <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>202 Accepted</td>
+                        <td>New calculation commenced
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>208 Already Reported</td>
+                        <td>Result was calculated previously - available at the Location Header URL
+                        </td>
+                    </tr>
+
+                    </tbody>
+                </table>
+                <br>
+            </section>
+
+            <section>
+                <h4>Response Headers</h4>
+
+                <div>
+                </div>
+                <table class="responseparameters">
+                    <thead>
+                    <tr>
+                        <th>Header Name</th>
+                        <th>Example Value</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>Location</td>
+                        <td>/api/v0/factorial/100</td>
+                        <td>href</td>
+                    </tr>
+
+                    </tbody>
+                </table>
+            </section>
+        </article>
+    </form>
+</li>
+
+
+
+<li class="method get ">
+    <a name="getresult">
+        <div class="title">
+            <span class="http-method authreq">GET</span>
+            <span class="name">Calculation Result</span>
+            <span class="uri">/api/v0/factorial/{input}</span>
+        </div>
+    </a>
+
+    <form class="hidden"><input value="GET" name="httpMethod" type="hidden"><input value="" name="" type="hidden">
+        <input value="/api/v0/factorial/:input"
+               name="methodUri" type="hidden">
+            <span class="description"><p class="desc_title">
+            </p><p>Request for the result of the calculation<br>
+            </p>
+                <p>
+                    <p>
+                    The result is either available and complete or in progress.
+                    </p>
+
+                </p>
+                <br>
+            </span>
+        <article>
+            <section>
+                <h4>Request Headers</h4>
+                <table class="parameters">
+                    <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Value</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="">
+                        <td class="name">input</td>
+                        <td class="parameter"><input name="params[input]"
+                                                     value=100>
+                        </td>
+                        <td class="type">Integer</td>
+                        <td class="required">R</td>
+                        <td class="description">Positive integer input to the factorial function</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h4>Live Call</h4>
+                <input value="Try it!" id="getenv" type="submit">
+
+                <div class="liveformpoint"></div>
+            </section>
+            <section>
+                <h4>Response Document</h4>
+
+                <p>Json document containing results</p>
+            </section>
+            <section>
+                <h4>Response Codes</h4>
+
+                <div>
+                </div>
+                <table class="responsecodes">
+                    <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>206 Partial Content</td>
+                        <td>Calculation in progress
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>200 OK</td>
+                        <td>Result was calculated and is available in the returned document
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>404 Not Found</td>
+                        <td>The input key was not found, no result forthcoming
+                        </td>
+                    </tr>
+
+                    </tbody>
+                </table>
+                <br>
+            </section>
+
+            <section>
+                <h4>Response Headers</h4>
+
+                <div>
+                </div>
+                <table class="responseparameters">
+                    <thead>
+                    <tr>
+                        <th>Header Name</th>
+                        <th>Example Value</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>Location</td>
+                        <td>/api/v0/factorial/100</td>
+                        <td>href</td>
+                    </tr>
+
+                    </tbody>
+                </table>
+            </section>
+        </article>
+    </form>
+</li>
+
+<li class="method delete ">
+    <a name="calcdelete">
+        <div class="title">
+            <span class="http-method authreq">DELETE</span>
+            <span class="name">Delete Result</span>
+            <span class="uri">/api/v0/factorial/{input}</span>
+        </div>
+    </a>
+
+    <form class="hidden"><input value="DELETE" name="httpMethod" type="hidden"><input value="" name="" type="hidden">
+        <input value="/api/v0/factorial/:input"
+               name="methodUri" type="hidden">
+            <span class="description"><p class="desc_title">
+            </p><p>Delete a previously calculated result<br>
+            </p>
+                <p>
+                    <p>
+                        The result and key (input) is deleted from the data store. Only complete calculations can be deleted.
+                    </p>
+
+                </p>
+                <br>
+            </span>
+        <article>
+            <section>
+                <h4>Call Description</h4>
+                <table class="parameters">
+                    <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Value</th>
+                        <th>Type</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="">
+                        <td class="name">input</td>
+                        <td class="parameter"><input name="params[input]"
+                                                     value=100>
+                        </td>
+                        <td class="type">Integer</td>
+                        <td class="required">R</td>
+                        <td class="description">Positive integer input to the factorial function</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h4>Request Headers</h4>
+                <table class="parameters">
+                    <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Value</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="">
+                        <td class="name">Accept</td>
+                        <td class="parameter"><input value="application/json" readonly></td>
+                        <td class="required">R</td>
+                        <td class="description">Accept specifier</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section>
+                <h4>Live Call</h4>
+                <input value="Try it!" id="deletecall" type="submit">
+
+                <div class="liveformpoint"></div>
+            </section>
+            <section>
+                <h4>Response Document</h4>
+
+                <p>Json document containing results</p>
+            </section>
+            <section>
+                <h4>Response Codes</h4>
+
+                <div>
+                </div>
+                <table class="responsecodes">
+                    <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>404 Not Found</td>
+                        <td>input value not found
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>200 OK</td>
+                        <td>input key deleted
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>420 Enhance Your Calm</td>
+                        <td>The key was found but the result is still being calculated and cannot be deleted until complete.
+                        </td>
+                    </tr>
+
+                    </tbody>
+                </table>
+                <br>
+            </section>
+
+            <section>
+                <h4>Response Headers</h4>
+
+                <div>
+                </div>
+                <table class="responseparameters">
+                    <thead>
+                    <tr>
+                        <th>Header Name</th>
+                        <th>Example Value</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>Location</td>
+                        <td>u/r/l</td>
+                        <td>---</td>
+                    </tr>
+
+                    </tbody>
+                </table>
+            </section>
+        </article>
+    </form>
+</li>
+
+</ul>
+
+</li>
+
+<script src="../../js/prettify.js"></script>
+<script src="../../js/json2.js"></script>
+<script src="../../js/docs.js"></script>
+
+<!--<footer>-->
+    <!--<span>&copy; 2014</span>-->
+<!--</footer>-->
+
+</article>
+
+</div>   <!-- tabtable span 12 -->
+</div>  <!-- row -->
+
+<!-- Initialize Scripts -->
+<script>
+    // Activate Google Prettify in this page
+    addEventListener('load', prettyPrint, false);
+
+    $(document).ready(function () {
+
+        // Add prettyprint class to pre elements
+        $('pre').addClass('prettyprint');
+
+    }); // end document.ready
+
+</script>
+
+</body>
+</html>
